@@ -119,8 +119,7 @@ const commands = [
     .setDescription("Add a user to the waitlist with an order")
     .addUserOption(o => o.setName("user").setDescription("Customer being added").setRequired(true))
     .addStringOption(o => o.setName("item").setDescription("Item ordered").setRequired(true))
-    .addStringOption(o => o.setName("mop").setDescription("Method of payment").setRequired(true))
-    .addStringOption(o => o.setName("amount").setDescription("Quantity ordered").setRequired(true)),
+    .addStringOption(o => o.setName("mop").setDescription("Method of payment").setRequired(true)),
 
   // Prices (admin only)
   new SlashCommandBuilder()
@@ -273,7 +272,7 @@ _ _ 　  ✿　　.　　✦　　.　　˚`;
     // ───────────── /waitlist - WAITLIST STATUS MENU
     if (interaction.isStringSelectMenu() && interaction.customId === "wait_status") {
       const selected = interaction.values[0];
-      const updatedContent = interaction.message.content.replace(/pending|waiting|processing/i, selected);
+      const updatedContent = interaction.message.content.replace(/pending|paid|processing/i, selected);
       const components = selected === "complete" ? [] : interaction.message.components;
       return interaction.update({ content: updatedContent, components });
     }
@@ -298,7 +297,6 @@ _ _ 　  ✿　　.　　✦　　.　　˚`;
       const user = interaction.options.getUser("user");
       const item = interaction.options.getString("item");
       const mop = interaction.options.getString("mop");
-      const amount = interaction.options.getString("amount");
 
       const row = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
@@ -344,13 +342,12 @@ _ _ 　  ✿　　.　　✦　　.　　˚`;
 
       await wlChannel.send({
         content: `_ _ 　  ✦　　.　　𓂀　　.　　✧ 
-_ _　 　꒰ ◜　\`💉\`　◝ ꒱　⁺　${user.username}'s ◟
+_ _　 　꒰ ◜　\`💉\`　◝ ꒱　⁺　${user}'s ◟
 _ _　         ◍　˚  \`💬\`　࿓　queue spot 
 _ _ 　  ˚　　 .　 　\`💀\`　　˚　 　 .　　 ˚ 
 _ _　   ⨀ 𓄹 ⨀　⏑⏑　user's　**order** 
 _ _　   · 𐙚 ·´　\`🕸\`　｡　Ⴢ　item: ${item} 
-_ _　　 ⁺　\`🦴\`　𓐆　˚　ฅ　amount: ${amount}
-_ _　　 ⁺　\`🩸\`　𓐆　˚　ฅ　payment: ${mop} 
+_ _　　 ⁺　\`🦴\`　𓐆　˚　ฅ　payment: ${mop} 
 _ _ 　  ˚　　 .　 　\`🗯\`　　˚　 　 .　　 ˚ 
 _ _　　꙳ 𓊝 ꙳　**status**: pending 
 _ _ 　  ✿　　.　　✦　　.　　˚ 
