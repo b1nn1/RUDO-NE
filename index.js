@@ -53,19 +53,19 @@ const validStyles = {
 const commands = [
   // Ticket system
   new SlashCommandBuilder()
-    .setName("ticketbutton")
+    .setName("ticket")
     .setDescription("Create a ticket panel with up to 3 buttons")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addStringOption(o => o.setName("color1").setDescription("Color for Button 1").setRequired(true))
-    .addStringOption(o => o.setName("label1").setDescription("Label for Button 1"))
+    .addStringOption(o => o.setName("label1").setDescription("Color for Button 1").setRequired(true))
+    .addStringOption(o => o.setName("desc1").setDescription("Label for Button 1"))
     .addStringOption(o => o.setName("emoji1").setDescription("Emoji for Button 1"))
     .addChannelOption(o => o.setName("category1").setDescription("Category for Button 1").addChannelTypes(ChannelType.GuildCategory))
-    .addStringOption(o => o.setName("color2").setDescription("Color for Button 2"))
-    .addStringOption(o => o.setName("label2").setDescription("Label for Button 2"))
+  .addStringOption(o => o.setName("label2").setDescription("Color for Button 2"))
+  .addStringOption(o => o.setName("desc2").setDescription("Label for Button 2"))
     .addStringOption(o => o.setName("emoji2").setDescription("Emoji for Button 2"))
     .addChannelOption(o => o.setName("category2").setDescription("Category for Button 2").addChannelTypes(ChannelType.GuildCategory))
-    .addStringOption(o => o.setName("color3").setDescription("Color for Button 3"))
-    .addStringOption(o => o.setName("label3").setDescription("Label for Button 3"))
+  .addStringOption(o => o.setName("label3").setDescription("Color for Button 3"))
+  .addStringOption(o => o.setName("desc3").setDescription("Label for Button 3"))
     .addStringOption(o => o.setName("emoji3").setDescription("Emoji for Button 3"))
     .addChannelOption(o => o.setName("category3").setDescription("Category for Button 3").addChannelTypes(ChannelType.GuildCategory)),
 
@@ -269,186 +269,171 @@ _ _ 　  ✿　　.　　✦　　.　　˚`;
       return interaction.reply({ content: receipt, ephemeral: false });
     }
 
-    // ───────────── /waitlist - WAITLIST STATUS MENU
-    if (interaction.isStringSelectMenu() && interaction.customId === "wait_status") {
-      const selected = interaction.values[0];
-      const updatedContent = interaction.message.content.replace(/pending|paid|processing/i, selected);
-      const components = selected === "complete" ? [] : interaction.message.components;
-      return interaction.update({ content: updatedContent, components });
-    }
-
-    // ───────────── /waitlist Command
+    // ───────────── /waitlist Command with single container
     if (interaction.isChatInputCommand() && interaction.commandName === "waitlist") {
-      if (!interaction.member.roles.cache.has(staffRoleId)) {
-        return interaction.reply({ 
-          content: "🚫 You do not have permission to use this command.", 
-          ephemeral: true 
+        if (!interaction.member.roles.cache.has(staffRoleId)) 
+            return interaction.reply({ content: "🚫 No permission.", ephemeral: true });
+        const wlChannel = interaction.guild.channels.cache.get(WL_ID);
+        if (!wlChannel?.isTextBased()) 
+            return interaction.reply({ content: "❌ Waitlist channel not found.", ephemeral: true });
+        const user = interaction.options.getUser("user");
+        const item = interaction.options.getString("item");
+        const mop = interaction.options.getString("mop");
+
+        await wlChannel.send({
+            content: `_ _\n_ _ 　  ✦　　.　　𓂀　　.　　✧\n_ _　 　꒰ ◜　\`💉\`　◝ ꒱　⁺　${user}**'s** ◟\n_ _　         ◍　˚  \`💬\`　࿓　queue spot\n_ _`
         });
-      }
 
-      const wlChannel = interaction.guild.channels.cache.get(WL_ID);
-      if (!wlChannel?.isTextBased()) {
-        return interaction.reply({ 
-          content: "❌ Waitlist channel not found.", 
-          ephemeral: true 
+        const container = {
+            type: 17,
+            components: [
+                {
+                    type: 12,
+                    items: [{
+                        media: { url: "https://cdn.discordapp.com/attachments/1439498545106259969/1445927408778739892/ei_1764806262011-removebg-preview.png" },
+                        spoiler: false,
+                        description: null
+                    }]
+                },
+                {
+                    type: 12,
+                    items: [{
+                        media: { url: "https://cdn.discordapp.com/attachments/1439498545106259969/1445927468182667274/ecc8bc2b4d4847f9e7f0daeaffc3605e.jpg" }
+                    }]
+                },
+                {
+                    type: 10,
+                    content: `_ _ 　  ˚　　 .　 　\`💀\`　　˚　 　 .　　 ˚\n_ _　   ⨀ 𓄹 ⨀　⏑⏑　new　**order**\n_ _　   · 𐙚 ·´　\`🕸\`　｡　Ⴢ　item: ${item}\n_ _　　 ⁺　\`🦴\`　𓐆　˚　ฅ　payment: ${mop}\n_ _ 　  ˚　　 .　 　\`🗯\`　　˚　 　 .　　 ˚\n_ _　　꙳ 𓊝 ꙳　**status**: pending\n_ _ 　  ✿　　.　　✦　　.　　˚`
+                },
+                {
+                    type: 12,
+                    items: [{
+                        media: { url: "https://cdn.discordapp.com/attachments/1439498545106259969/1445927408778739892/ei_1764806262011-removebg-preview.png" },
+                        spoiler: false,
+                        description: null
+                    }]
+                },
+                {
+                    type: 1,
+                    components: [{
+                        type: 3,
+                        custom_id: "wait_status",
+                        placeholder: "⠀ ⠀ ⠀/ᐠ > . < ̥マ    ݂۫   status",
+                        options: [
+                            { label: "⃟", value: "paid", description: "𓏵۪۪　﹒　　 paid　𓏼", emoji: { id: "1445921537340211242", name: "unknown", animated: true } },
+                            { label: "⃟", value: "processing", description: "𓏫　⌣　　﹕　processing　𓈒　 ͝ །⠀⠀", emoji: { id: "1445919743788978367", name: "unknown" } },
+                            { label: "⃟", value: "complete", description: "◟ ͜  ︵◞◟　　﹕　complete　𓂃𓏼⁾⁾", emoji: { id: "1445921420327653417", name: "unknown", animated: true } }
+                        ]
+                    }]
+                },
+                {
+                    type: 14,
+                    spacing: 1,
+                    divider: true
+                }
+            ]
+        };
+
+        await wlChannel.send({ 
+            components: [container],
+            flags: 32768 // MessageFlags.IsComponentsV2
         });
-      }
+        return interaction.reply({ content: "✅ Order added to waitlist!", ephemeral: true });
+    }
 
-      const user = interaction.options.getUser("user");
-      const item = interaction.options.getString("item");
-      const mop = interaction.options.getString("mop");
+    // ───────────── Status select menu handler
+    client.on("interactionCreate", async interaction => {
+        if (!interaction.isStringSelectMenu() || interaction.customId !== "wait_status") return;
+        const selected = interaction.values[0];
+        const container = interaction.message.components[0];
 
-      const row = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId("wait_status")
-          .setPlaceholder("⠀ ⠀ ⠀/ᐠ > . < ̥マ    ݂۫   status  𓏼 ₊      ͜  ◞ ྀིྀ")
-          .addOptions(
-            { 
-              label: "⃟", 
-              value: "paid", 
-              description: "𓏵۪۪　﹒　　 paid　𓏼", 
-              emoji: { id: "1445921537340211242", name: "cuursor", animated: true } 
-            },
-            { 
-              label: "⃟", 
-              value: "processing", 
-              description: "𓏫　⌣　　﹕　processing　𓈒　 ͝ །⠀⠀", 
-              emoji: { id: "1445919743788978367", name: "cross" } 
-            },
-            { 
-              label: "⃟", 
-              value: "complete", 
-              description: "◟ ͜  ︵◞◟　　﹕　complete　𓂃𓏼⁾⁾", 
-              emoji: { id: "1445921420327653417", name: "arr", animated: true } 
+        // Update the text content (component at index 2)
+        const updatedComponents = container.components.map((component, index) => {
+            if (index === 2 && component.type === 10) {
+                return {
+                    ...component,
+                    content: component.content.replace(/status:\s*\w+/i, `status: ${selected}`)
+                };
             }
-          )
-      );
-
-      await wlChannel.send({
-        embeds: [{
-          image: { 
-            url: "https://cdn.discordapp.com/attachments/1439498545106259969/1445927408778739892/ei_1764806262011-removebg-preview.png?ex=69322056&is=6930ced6&hm=379f1c2c9ce4024093bd802d9d90b3473aad84731d11e7ee6bb8031caea39ac4&" 
-          }
-        }]
-      });
-
-      await wlChannel.send({
-        embeds: [{
-          image: { 
-            url: "https://cdn.discordapp.com/attachments/1439498545106259969/1445927468182667274/ecc8bc2b4d4847f9e7f0daeaffc3605e.jpg?ex=69322064&is=6930cee4&hm=5585bd4a9b1ccbb4365ea92e7305d68bcef2fbb067e89bbca6862adc48d2443d&" 
-          }
-        }]
-      });
-
-      await wlChannel.send({
-        content: `_ _ 　  ✦　　.　　𓂀　　.　　✧ 
-_ _　 　꒰ ◜　\`💉\`　◝ ꒱　⁺　${user}'s ◟
-_ _　         ◍　˚  \`💬\`　࿓　queue spot 
-_ _ 　  ˚　　 .　 　\`💀\`　　˚　 　 .　　 ˚ 
-_ _　   ⨀ 𓄹 ⨀　⏑⏑　user's　**order** 
-_ _　   · 𐙚 ·´　\`🕸\`　｡　Ⴢ　item: ${item} 
-_ _　　 ⁺　\`🦴\`　𓐆　˚　ฅ　payment: ${mop} 
-_ _ 　  ˚　　 .　 　\`🗯\`　　˚　 　 .　　 ˚ 
-_ _　　꙳ 𓊝 ꙳　**status**: pending 
-_ _ 　  ✿　　.　　✦　　.　　˚ 
-`,
-        components: [row],
-        embeds: [{
-          image: { 
-            url: "https://cdn.discordapp.com/attachments/1439498545106259969/1445927408778739892/ei_1764806262011-removebg-preview.png?ex=69322056&is=6930ced6&hm=379f1c2c9ce4024093bd802d9d90b3473aad84731d11e7ee6bb8031caea39ac4&" 
-          }
-        }]
-      });
-
-      return interaction.reply({ content: "✅ Order added to waitlist!", ephemeral: true });
-    }
-
-    // ───────────── Update Waitlist Buttons
-    if (interaction.isButton() && ["status_paid", "status_processing", "status_done"].includes(interaction.customId)) {
-      if (!interaction.member.roles.cache.has(staffRoleId)) {
-        return interaction.reply({ 
-          content: "🚫 You cannot update this.", 
-          ephemeral: true 
+            return component;
         });
-      }
 
-      const status = {
-        status_paid: "paid",
-        status_processing: "processing",
-        status_done: "done",
-      }[interaction.customId];
-
-      const updated = interaction.message.content.replace(/status:\s*\w+/i, `status: ${status}`);
-
-      let components = interaction.message.components;
-      if (status === "done") {
-        components = interaction.message.components.map(row => {
-          const newRow = ActionRowBuilder.from(row);
-          newRow.components = newRow.components.map(b => ButtonBuilder.from(b).setDisabled(true));
-          return newRow;
-        });
-      }
-
-      await interaction.message.edit({ content: updated, components });
-      return interaction.reply({ 
-        content: `✅ Status updated to **${status}**.`, 
-        ephemeral: true 
-      });
-    }
-
-    // ───────────── /ticketbutton
-    if (interaction.isChatInputCommand() && interaction.commandName === "ticketbutton") {
-      const buttons = [];
-      const buttonCategories = {};
-
-      for (let i = 1; i <= 3; i++) {
-        const color = interaction.options.getString(`color${i}`);
-        const label = interaction.options.getString(`label${i}`);
-        const emoji = interaction.options.getString(`emoji${i}`);
-        const category = interaction.options.getChannel(`category${i}`);
-
-        if (i === 1 && !color) {
-          return interaction.reply({ 
-            content: "Button 1 must have a color!", 
-            ephemeral: true 
-          });
+        // If complete, remove the select menu (index 4) and divider (index 5)
+        if (selected === "complete") {
+            updatedComponents.splice(4, 2);
         }
 
-        if (!color && !label && !emoji) continue;
+        const newContainer = {
+            type: 17,
+            components: updatedComponents
+        };
 
-        const style = validStyles[color?.toLowerCase()] || ButtonStyle.Primary;
-        const btn = new ButtonBuilder()
-          .setCustomId(`ticket_create_${i}`)
-          .setLabel(label || `Ticket ${i}`)
-          .setStyle(style);
+        await interaction.update({ 
+            components: [newContainer],
+            flags: 32768 // MessageFlags.IsComponentsV2
+        });
+    });
 
-        if (emoji) btn.setEmoji(emoji);
-        buttons.push(btn);
+    // ───────────── /ticket as SELECT MENU
+    if (interaction.isChatInputCommand() && interaction.commandName === "ticket") {
+      const ticketOptions = [];
 
-        if (category) buttonCategories[`ticket_create_${i}`] = category.id;
-      }
+      for (let i = 1; i <= 3; i++) {
+        const label = interaction.options.getString(`label${i}`);
+        const desc = interaction.options.getString(`desc${i}`);
+        const category = interaction.options.getChannel(`category${i}`);
+        const emoji = interaction.options.getString(`emoji${i}`);
 
-      if (!buttons.length) {
-        return interaction.reply({ 
-          content: "No buttons were configured!", 
-          ephemeral: true 
+        if (!label || !category) continue;
+
+        ticketOptions.push({
+          label,
+          value: `ticket_${i}`,
+          description: `${desc}`,
+          emoji: emoji || undefined,
+          categoryId: category.id
         });
       }
 
-      const row = new ActionRowBuilder().addComponents(buttons);
-      interaction.client.ticketButtonCategories = buttonCategories;
+      if (!ticketOptions.length) {
+        return interaction.reply({ 
+          content: "❌ No ticket options were configured!", 
+          flags: 64 
+        });
+      }
 
-      await interaction.reply({ content: "✅ Ticket panel sent!", ephemeral: true });
-      await interaction.channel.send({ components: [row] });
+      const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId("ticket_create_select")
+        .setPlaceholder(" ♡ྀི̣̣̥ ‿    select ticket    𓈒ֵ۫𓏼 ୨")
+        .addOptions(ticketOptions.map(opt => ({
+          label: opt.label,
+          value: opt.value,
+          description: opt.description,
+          emoji: opt.emoji
+        })));
+
+      // save mapping
+      interaction.client.ticketButtonCategories = Object.fromEntries(
+        ticketOptions.map(opt => [opt.value, opt.categoryId])
+      );
+
+      const row = new ActionRowBuilder().addComponents(selectMenu);
+
+      await interaction.channel.send({ 
+        components: [row]
+      });
     }
 
-    // ───────────── Ticket Create
-    if (interaction.isButton() && interaction.customId.startsWith("ticket_create_")) {
-      const categoryId = interaction.client.ticketButtonCategories?.[interaction.customId];
+
+    // ───────────── HANDLE SELECT MENU
+    if (interaction.isStringSelectMenu() && interaction.customId === "ticket_create_select") {
+      const selected = interaction.values[0];
+      const categoryId = interaction.client.ticketButtonCategories?.[selected];
+
       if (!categoryId) {
         return interaction.reply({ 
-          content: "No category set for this button.", 
-          ephemeral: true 
+          content: "❌ No category set for this ticket.", 
+          flags: 64 
         });
       }
 
@@ -459,7 +444,7 @@ _ _ 　  ✿　　.　　✦　　.　　˚
       if (existing) {
         return interaction.reply({ 
           content: "❌ You already have a ticket!", 
-          ephemeral: true 
+          flags: 64 
         });
       }
 
@@ -468,32 +453,18 @@ _ _ 　  ✿　　.　　✦　　.　　˚
         type: 0,
         parent: categoryId,
         permissionOverwrites: [
-          { 
-            id: interaction.guild.roles.everyone, 
-            deny: ["ViewChannel"] 
-          },
-          { 
-            id: interaction.user.id, 
-            allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"] 
-          },
-          { 
-            id: staffRoleId, 
-            allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"] 
-          },
-        ],
+          { id: interaction.guild.roles.everyone, deny: ["ViewChannel"] },
+          { id: interaction.user.id, allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"] },
+          { id: staffRoleId, allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"] }
+        ]
       });
 
-      const staffRole = interaction.guild.roles.cache.get(staffRoleId);
       const embed = new EmbedBuilder()
-        .setTitle("thank you for opening a ticket!")
-        .setDescription("> _ _  hi there! a staff member will be here soon!\n type `.start` to begin!")
-        .addFields({ 
-          name: "customer", 
-          value: `<@${interaction.user.id}>`, 
-          inline: true 
-        })
+        .setTitle("Thank you for opening a ticket!")
+        .setDescription("> Hi! A staff member will be with you shortly.\nType `.start` to begin.")
+        .addFields({ name: "Customer", value: `<@${interaction.user.id}>`, inline: true })
         .setColor(0x36393f)
-        .setImage("https://cdn.discordapp.com/attachments/1427657618008047621/1428616052152991744/ei_1760678820069-removebg-preview.png?ex=68f3cea1&is=68f27d21&hm=715e94744bb7c42a3289fc6dade894ba354d6b1cf0056b6a6ff0a6b83ef2da17");
+        .setImage("https://cdn.discordapp.com/attachments/1427657618008047621/1428616052152991744/ei_1760678820069-removebg-preview.png");
 
       const closeButton = new ButtonBuilder()
         .setCustomId("ticket_close")
@@ -502,40 +473,36 @@ _ _ 　  ✿　　.　　✦　　.　　˚
 
       const row = new ActionRowBuilder().addComponents(closeButton);
 
-      await ticketChannel.send({ 
-        content: `${staffRole} <@${interaction.user.id}>`, 
-        embeds: [embed], 
-        components: [row] 
+      await ticketChannel.send({
+        content: `<@&${staffRoleId}> <@${interaction.user.id}>`,
+        embeds: [embed],
+        components: [row]
       });
 
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ 
-          content: `✅ Ticket created: ${ticketChannel}`, 
-          ephemeral: true 
-        });
-      } else {
-        await interaction.reply({ 
-          content: `✅ Ticket created: ${ticketChannel}`, 
-          ephemeral: true 
-        });
-      }
+      await interaction.reply({ 
+        content: `✅ Ticket created: ${ticketChannel}`, 
+        flags: 64 
+      });
     }
 
-    // ───────────── Ticket Close
+
+    // ───────────── CLOSE BUTTON
     if (interaction.isButton() && interaction.customId === "ticket_close") {
       if (!interaction.member.roles.cache.has(staffRoleId)) {
         return interaction.reply({ 
           content: "🚫 You don't have permission to close this ticket.", 
-          ephemeral: true 
+          flags: 64
         });
       }
 
       await interaction.reply({ 
         content: "🗑️ Closing ticket in 3 seconds...", 
-        ephemeral: true 
+        flags: 64
       });
 
-      setTimeout(() => interaction.channel.delete().catch(console.error), 3000);
+      setTimeout(() => {
+        interaction.channel.delete().catch(console.error);
+      }, 3000);
     }
 
     // ───────────── /prices
