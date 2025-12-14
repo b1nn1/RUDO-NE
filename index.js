@@ -852,7 +852,7 @@ _ _ 　  ✿　　.　　✦　　.　　˚`;
         });
 
         // Send transcript to a log channel (replace with your log channel ID)
-        const logChannelId = "YOUR_LOG_CHANNEL_ID"; // Set this to your transcript log channel
+        const logChannelId = "1445580720839069696"; // Set this to your transcript log channel
         const logChannel = interaction.guild.channels.cache.get(logChannelId);
 
         if (logChannel) {
@@ -898,23 +898,23 @@ _ _ 　  ✿　　.　　✦　　.　　˚`;
         .setPlaceholder(" 　　૮꒰ྀི ᴗ͈ . ᴗ͈ ∩꒱აྀི ˚ ⊹𓏼 payments ୧ ཾ ֪ | ͜͝ || ͜͝ |")
         .addOptions([
           { 
-            label: "⠀ ⠀ ⠀⁀➷ ⠀ ⠀ one ⠀﹒ ⠀c@shapp⠀⠀ྀིྀ", 
-            description: "ꈍ　　ㆍ　　✤　　⁺　　ㆍ　　ꈍ", 
+            label: "⃟", 
+            description: "⠀ ⠀ ⠀⁀➷ ⠀ ⠀ 1 ⠀﹒ ⠀c@shapp⠀⠀ྀིྀ", 
             value: "cashapp" 
           },
           { 
-            label: "⠀ ⠀ ⠀⁀➷ ⠀ ⠀ two ⠀﹒ ⠀nitro ⠀⠀ྀིྀ", 
-            description: "ꈍ　　ㆍ　　✤　　⁺　　ㆍ　　ꈍ", 
+            label: "⃟", 
+            description: "⠀ ⠀ ⠀⁀➷ ⠀ ⠀ 2 ⠀﹒ ⠀nitro⠀⠀ྀིྀ", 
             value: "nitro" 
           },
           { 
-            label: "⠀ ⠀ ⠀⁀➷ ⠀ ⠀ three⠀﹒ ⠀robux ⠀⠀ྀིྀ", 
-            description: "ꈍ　　ㆍ　　✤　　⁺　　ㆍ　　ꈍ", 
+            label: "⃟", 
+            description: "⠀ ⠀ ⠀⁀➷ ⠀ ⠀ 3 ⠀﹒ ⠀rbx⠀⠀ྀིྀ", 
             value: "robux" 
           },
           { 
-            label: "⠀ ⠀ ⠀⁀➷ ⠀ ⠀ four ⠀﹒ ⠀add-ons ⠀⠀ྀིྀ", 
-            description: "ꈍ　　ㆍ　　✤　　⁺　　ㆍ　　ꈍ", 
+            label: "⃟", 
+            description: "⠀ ⠀ ⠀⁀➷ ⠀ ⠀ 0⠀﹒ ⠀add-ons⠀⠀ྀིྀ", 
             value: "addons" 
           },
         ]);
