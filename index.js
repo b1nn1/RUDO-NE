@@ -4,6 +4,14 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// Get __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 import {
   Client,
   GatewayIntentBits,
@@ -48,6 +56,42 @@ const validStyles = {
   danger: ButtonStyle.Danger,
 };
 
+// ═══════════════════════════════════════════════════════════
+// 🤖 AUTORESPONDER SYSTEM
+// ═══════════════════════════════════════════════════════════
+
+const autoresponders = new Map();
+const AUTORESPONDER_FILE = path.join(__dirname, 'autoresponders.json');
+
+// Load autoresponders from JSON file
+function loadAutoresponders() {
+  try {
+    if (fs.existsSync(AUTORESPONDER_FILE)) {
+      const data = fs.readFileSync(AUTORESPONDER_FILE, 'utf8');
+      const loaded = JSON.parse(data);
+      for (const [key, value] of Object.entries(loaded)) {
+        autoresponders.set(key, value);
+      }
+      console.log(`✅ Loaded ${autoresponders.size} autoresponders`);
+    }
+  } catch (error) {
+    console.error('Error loading autoresponders:', error);
+  }
+}
+
+// Save autoresponders to JSON file
+function saveAutoresponders() {
+  try {
+    const obj = Object.fromEntries(autoresponders);
+    fs.writeFileSync(AUTORESPONDER_FILE, JSON.stringify(obj, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Error saving autoresponders:', error);
+  }
+}
+
+// Load autoresponders when bot starts
+loadAutoresponders();
+
 // ───────────────────────────────
 // 🧾 Slash commands
 // ───────────────────────────────
@@ -69,6 +113,34 @@ const commands = [
   .addStringOption(o => o.setName("desc3").setDescription("Label for Button 3"))
     .addStringOption(o => o.setName("emoji3").setDescription("Emoji for Button 3"))
     .addChannelOption(o => o.setName("category3").setDescription("Category for Button 3").addChannelTypes(ChannelType.GuildCategory)),
+
+  // Autoresponder system
+  new SlashCommandBuilder()
+    .setName('autoresponder')
+    .setDescription('Manage autoresponders')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand(sub =>
+      sub.setName('add')
+        .setDescription('Add an autoresponder')
+        .addStringOption(o => o.setName('trigger').setDescription('Trigger word/phrase').setRequired(true))
+        .addStringOption(o => o.setName('response').setDescription('Response message').setRequired(true))
+        .addBooleanOption(o => o.setName('exact_match').setDescription('Require exact match (default: contains)'))
+        .addBooleanOption(o => o.setName('delete_trigger').setDescription('Delete the trigger message'))
+    )
+    .addSubcommand(sub =>
+      sub.setName('remove')
+        .setDescription('Remove an autoresponder')
+        .addStringOption(o => o.setName('trigger').setDescription('Trigger to remove').setRequired(true))
+    )
+    .addSubcommand(sub =>
+      sub.setName('list')
+        .setDescription('List all autoresponders')
+    )
+    .addSubcommand(sub =>
+      sub.setName('toggle')
+        .setDescription('Enable/disable an autoresponder')
+        .addStringOption(o => o.setName('trigger').setDescription('Trigger to toggle').setRequired(true))
+    ),
 
   // Create embed
   new SlashCommandBuilder()
@@ -152,7 +224,7 @@ client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   client.user.setPresence({
     status: "dnd",
-    activities: [{ name: "my beautiful treasures", type: 3 }],
+    activities: [{ name: "in testing", type: 3 }],
   });
 
   try {
@@ -168,6 +240,119 @@ client.once("ready", async () => {
 // ───────────────────────────────
 client.on("interactionCreate", async interaction => {
   try {
+    if (interaction.isChatInputCommand() && interaction.commandName === "autoresponder") {
+      if (!interaction.member.permissions.has('Administrator')) {
+        return interaction.reply({ 
+          content: "🚫 You need Administrator permission to manage autoresponders.", 
+          flags: 64 
+        });
+      }
+
+      const subcommand = interaction.options.getSubcommand();
+
+      // ─── ADD AUTORESPONDER ───
+      if (subcommand === "add") {
+        const trigger = interaction.options.getString("trigger").toLowerCase();
+        const response = interaction.options.getString("response");
+        const exactMatch = interaction.options.getBoolean("exact_match") || false;
+        const deleteTrigger = interaction.options.getBoolean("delete_trigger") || false;
+
+        autoresponders.set(trigger, {
+          response: response,
+          exactMatch: exactMatch,
+          deleteTrigger: deleteTrigger,
+          enabled: true,
+          createdBy: interaction.user.id,
+          createdAt: Date.now()
+        });
+
+        saveAutoresponders();
+
+        const embed = new EmbedBuilder()
+          .setTitle("✅ Autoresponder Added")
+          .setDescription(`**Trigger:** \`${trigger}\`\n**Response:** ${response}\n**Match Type:** ${exactMatch ? 'Exact Match' : 'Contains'}\n**Delete Trigger:** ${deleteTrigger ? 'Yes' : 'No'}`)
+          .setColor(0x00ff00)
+          .setFooter({ text: `Added by ${interaction.user.tag}` })
+          .setTimestamp();
+
+        return interaction.reply({ embeds: [embed], flags: 64 });
+      }
+
+      // ─── REMOVE AUTORESPONDER ───
+      if (subcommand === "remove") {
+        const trigger = interaction.options.getString("trigger").toLowerCase();
+
+        if (!autoresponders.has(trigger)) {
+          return interaction.reply({ 
+            content: `❌ No autoresponder found with trigger: \`${trigger}\``, 
+            flags: 64 
+          });
+        }
+
+        autoresponders.delete(trigger);
+        saveAutoresponders();
+
+        return interaction.reply({ 
+          content: `✅ Autoresponder with trigger \`${trigger}\` has been removed.`, 
+          flags: 64 
+        });
+      }
+
+      // ─── LIST AUTORESPONDERS ───
+      if (subcommand === "list") {
+        if (autoresponders.size === 0) {
+          return interaction.reply({ 
+            content: "📭 No autoresponders configured yet.", 
+            flags: 64 
+          });
+        }
+
+        const embed = new EmbedBuilder()
+          .setTitle("📋 Autoresponders List")
+          .setColor(0x5865f2)
+          .setFooter({ text: `Total: ${autoresponders.size} autoresponders` })
+          .setTimestamp();
+
+        let description = "";
+        let index = 1;
+
+        for (const [trigger, data] of autoresponders) {
+          const status = data.enabled ? "🟢" : "🔴";
+          const matchType = data.exactMatch ? "Exact" : "Contains";
+          const deleteMsg = data.deleteTrigger ? "🗑️" : "";
+          description += `**${index}.** ${status} ${deleteMsg} \`${trigger}\` *[${matchType}]*\n`;
+          description += `   ↳ ${data.response.substring(0, 50)}${data.response.length > 50 ? '...' : ''}\n\n`;
+          index++;
+        }
+
+        embed.setDescription(description);
+
+        return interaction.reply({ embeds: [embed], flags: 64 });
+      }
+
+      // ─── TOGGLE AUTORESPONDER ───
+      if (subcommand === "toggle") {
+        const trigger = interaction.options.getString("trigger").toLowerCase();
+
+        if (!autoresponders.has(trigger)) {
+          return interaction.reply({ 
+            content: `❌ No autoresponder found with trigger: \`${trigger}\``, 
+            flags: 64 
+          });
+        }
+
+        const data = autoresponders.get(trigger);
+        data.enabled = !data.enabled;
+        autoresponders.set(trigger, data);
+        saveAutoresponders();
+
+        return interaction.reply({ 
+          content: `${data.enabled ? '🟢' : '🔴'} Autoresponder \`${trigger}\` is now **${data.enabled ? 'enabled' : 'disabled'}**.`, 
+          flags: 64 
+        });
+      }
+    }
+
     // ───────────── /spacer
     if (interaction.isChatInputCommand() && interaction.commandName === "spacer") {
       const length = interaction.options.getString("length");
@@ -469,10 +654,11 @@ _ _ 　  ✿　　.　　✦　　.　　˚`;
       await interaction.channel.send({ 
         components: [row]
       });
+
+      return interaction.reply({ content: "✅ Ticket panel created!", flags: 64 });
     }
 
-
-    // ───────────── HANDLE SELECT MENU
+    // ───────────── HANDLE SELECT MENU (Create Ticket)
     if (interaction.isStringSelectMenu() && interaction.customId === "ticket_create_select") {
       const selected = interaction.values[0];
       const categoryId = interaction.client.ticketButtonCategories?.[selected];
@@ -499,31 +685,64 @@ _ _ 　  ✿　　.　　✦　　.　　˚`;
         name: `ticket-${interaction.user.username}`,
         type: 0,
         parent: categoryId,
+        topic: `Owner: ${interaction.user.id}`,
         permissionOverwrites: [
           { id: interaction.guild.roles.everyone, deny: ["ViewChannel"] },
           { id: interaction.user.id, allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"] },
           { id: staffRoleId, allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"] }
         ]
       });
-
-      const embed = new EmbedBuilder()
-        .setTitle("Thank you for opening a ticket!")
-        .setDescription("> Hi! A staff member will be with you shortly.\nType `.start` to begin.")
-        .addFields({ name: "Customer", value: `<@${interaction.user.id}>`, inline: true })
-        .setColor(0x36393f)
-        .setImage("https://cdn.discordapp.com/attachments/1427657618008047621/1428616052152991744/ei_1760678820069-removebg-preview.png");
-
-      const closeButton = new ButtonBuilder()
-        .setCustomId("ticket_close")
-        .setLabel("Close Ticket")
-        .setStyle(ButtonStyle.Danger);
-
-      const row = new ActionRowBuilder().addComponents(closeButton);
+    
+      // Create Components V2 container
+      const container = {
+        type: 17,
+        components: [
+          {
+            type: 10,
+            content: `<@&${staffRoleId}> <@${interaction.user.id}>`
+          },
+          {
+            type: 12,
+            items: [{
+              media: { url: "https://cdn.discordapp.com/attachments/1439498545106259969/1449781782546354258/download_14.jpg" },
+              spoiler: false,
+              description: null
+            }]
+          },
+          {
+            type: 10,
+            content: `⠀ ⠀ ⠀/ᐠ > . < ̥マ ݂۫ 𓏼 ₊ ͜ ◞ ྀིྀ\n> ⠀ ⠀ ꒰৮ ྐ✚ ₊　type \`.start\` to begin ⠀ ♡︎ ༷݁ ꒱ྀ\n> ⠀ ⠀ ꒷꒦ ͜ ¦𓏵 ᭪ read tos b4 ordering 𓏼 ͡ ⑅ ♡ \n> ⠀ ⠀ 𓉸ྀི 𓂃˚ thank you for buying! ྀི ͡ ̣̣̣ ׁ ︶\n\n`
+          },
+          {
+            type: 1,
+            components: [{
+              type: 3,
+              custom_id: "ticket_actions",
+              placeholder: "〖 𓉳ིྀ ׁ  ༘    admin ticket  actions   ܸ ͜͜〗",
+              options: [
+                { label: "⃟", value: "ticket_close", description: "close ticket" },
+                { label: "⃟", value: "ticket_add_user", description: "add user" },
+                { label: "⃟", value: "ticket_remove_user", description: "remove user" },
+                { label: "⃟", value: "ticket_lock", description: "lock ticket" },
+                { label: "⃟", value: "ticket_send_receipt", description: "send receipt" },
+                { label: "⃟", value: "ticket_delivery", description: "send delivery" },
+                { label: "⃟", value: "ticket_ban", description: "ban user" },
+                { label: "⃟", value: "ticket_priority", description: "set priority" },
+                { label: "⃟", value: "ticket_archive", description: "archive ticket" }
+              ]
+            }]
+          },
+          {
+            type: 14,
+            spacing: 1,
+            divider: true
+          }
+        ]
+      };
 
       await ticketChannel.send({
-        content: `<@&${staffRoleId}> <@${interaction.user.id}>`,
-        embeds: [embed],
-        components: [row]
+        components: [container],
+        flags: 32768
       });
 
       await interaction.reply({ 
@@ -532,365 +751,770 @@ _ _ 　  ✿　　.　　✦　　.　　˚`;
       });
     }
 
+    // ───────────── HANDLE TICKET ACTIONS SELECT MENU
+    if (interaction.isStringSelectMenu() && interaction.customId === "ticket_actions") {
+      const action = interaction.values[0];
 
-    // ───────────── CLOSE BUTTON WITH TRANSCRIPT
-    if (interaction.isButton() && interaction.customId === "ticket_close") {
       if (!interaction.member.roles.cache.has(staffRoleId)) {
         return interaction.reply({ 
-          content: "🚫 You don't have permission to close this ticket.", 
+          content: "🚫 You don't have permission to use this.", 
           flags: 64
         });
       }
 
-      await interaction.reply({ 
-        content: "📝 Generating transcript and closing ticket...", 
-        flags: 64
-      });
+      // CLOSE TICKET
+      if (action === "ticket_close") {
+        await interaction.reply({ 
+          content: "📝 Generating transcript and closing ticket...", 
+          flags: 64
+        });
+
+        try {
+          let allMessages = [];
+          let lastMessageId;
+
+          while (true) {
+            const options = { limit: 100 };
+            if (lastMessageId) options.before = lastMessageId;
+
+            const messages = await interaction.channel.messages.fetch(options);
+            if (messages.size === 0) break;
+
+            allMessages.push(...messages.values());
+            lastMessageId = messages.last().id;
+            if (messages.size < 100) break;
+          }
+
+          const sortedMessages = allMessages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+          const escapeHtml = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+
+          let transcript = `<!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Ticket Transcript - ${escapeHtml(interaction.channel.name)}</title>
+              <style>
+                  @import url('https://fonts.googleapis.com/css2?family=Whitney:wght@400;500;600;700&display=swap');
+
+                  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+                  body {
+                      font-family: 'Whitney', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                      background-color: #313338;
+                      color: #dbdee1;
+                      font-size: 16px;
+                      line-height: 1.375;
+                  }
+
+                  .discord-container {
+                      display: flex;
+                      height: 100vh;
+                      overflow: hidden;
+                  }
+
+                  .channel-sidebar {
+                      width: 240px;
+                      background-color: #2b2d31;
+                      display: flex;
+                      flex-direction: column;
+                      flex-shrink: 0;
+                  }
+
+                  .server-name {
+                      height: 48px;
+                      padding: 0 16px;
+                      display: flex;
+                      align-items: center;
+                      font-weight: 600;
+                      font-size: 16px;
+                      border-bottom: 1px solid #1e1f22;
+                      box-shadow: 0 1px 0 rgba(4,4,5,0.2), 0 1.5px 0 rgba(6,6,7,0.05), 0 2px 0 rgba(4,4,5,0.05);
+                  }
+
+                  .channel-list {
+                      flex: 1;
+                      padding: 8px;
+                      overflow-y: auto;
+                  }
+
+                  .channel-item {
+                      display: flex;
+                      align-items: center;
+                      padding: 6px 8px;
+                      margin: 1px 0;
+                      border-radius: 4px;
+                      color: #949ba4;
+                      font-size: 16px;
+                      cursor: pointer;
+                  }
+
+                  .channel-item.active {
+                      background-color: #404249;
+                      color: #f2f3f5;
+                  }
+
+                  .channel-icon {
+                      width: 20px;
+                      margin-right: 6px;
+                      color: #80848e;
+                  }
+
+                  .chat-container {
+                      flex: 1;
+                      display: flex;
+                      flex-direction: column;
+                      background-color: #313338;
+                  }
+
+                  .chat-header {
+                      height: 48px;
+                      padding: 0 16px;
+                      display: flex;
+                      align-items: center;
+                      border-bottom: 1px solid #26272b;
+                      box-shadow: 0 1px 0 rgba(4,4,5,0.2), 0 1.5px 0 rgba(6,6,7,0.05), 0 2px 0 rgba(4,4,5,0.05);
+                  }
+
+                  .channel-name {
+                      display: flex;
+                      align-items: center;
+                      font-weight: 600;
+                      font-size: 16px;
+                      color: #f2f3f5;
+                  }
+
+                  .channel-name::before {
+                      content: '#';
+                      margin-right: 8px;
+                      color: #80848e;
+                      font-weight: 300;
+                  }
+
+                  .channel-topic {
+                      margin-left: 12px;
+                      padding-left: 12px;
+                      border-left: 1px solid #3f4147;
+                      color: #949ba4;
+                      font-size: 14px;
+                      font-weight: 400;
+                  }
+
+                  .messages-wrapper {
+                      flex: 1;
+                      overflow-y: auto;
+                      padding: 16px 0;
+                  }
+
+                  .message-group {
+                      padding: 0 16px;
+                      margin-bottom: 16px;
+                      position: relative;
+                  }
+
+                  .message-group:hover {
+                      background-color: #2e3035;
+                  }
+
+                  .message-header {
+                      display: flex;
+                      align-items: center;
+                      margin-bottom: 2px;
+                  }
+
+                  .avatar {
+                      width: 40px;
+                      height: 40px;
+                      border-radius: 50%;
+                      margin-right: 16px;
+                      margin-top: 2px;
+                      flex-shrink: 0;
+                      cursor: pointer;
+                      overflow: hidden;
+                  }
+
+                  .avatar-image {
+                      width: 100%;
+                      height: 100%;
+                      object-fit: cover;
+                  }
+
+                  .message-content-wrapper {
+                      flex: 1;
+                      min-width: 0;
+                  }
+
+                  .message-author {
+                      display: flex;
+                      align-items: center;
+                  }
+
+                  .username {
+                      font-weight: 500;
+                      font-size: 16px;
+                      color: #f2f3f5;
+                      cursor: pointer;
+                      line-height: 22px;
+                  }
+
+                  .username:hover {
+                      text-decoration: underline;
+                  }
+
+                  .bot-tag {
+                      background-color: #5865f2;
+                      color: #ffffff;
+                      font-size: 10px;
+                      font-weight: 500;
+                      padding: 2px 4px;
+                      border-radius: 3px;
+                      margin-left: 6px;
+                      text-transform: uppercase;
+                      line-height: 16px;
+                      vertical-align: middle;
+                  }
+
+                  .timestamp {
+                      font-size: 12px;
+                      color: #949ba4;
+                      margin-left: 6px;
+                      font-weight: 500;
+                      line-height: 22px;
+                  }
+
+                  .message-text {
+                      color: #dbdee1;
+                      font-size: 16px;
+                      line-height: 22px;
+                      word-wrap: break-word;
+                      margin-top: 2px;
+                  }
+
+                  .embed {
+                      display: grid;
+                      margin-top: 8px;
+                      max-width: 520px;
+                      border-left: 4px solid #5865f2;
+                      background-color: #2b2d31;
+                      border-radius: 4px;
+                      padding: 8px 16px 16px 12px;
+                  }
+
+                  .embed-title {
+                      font-size: 16px;
+                      font-weight: 600;
+                      color: #00b0f4;
+                      margin-bottom: 8px;
+                      line-height: 22px;
+                  }
+
+                  .embed-description {
+                      font-size: 14px;
+                      color: #dbdee1;
+                      line-height: 18px;
+                  }
+
+                  .attachment {
+                      margin-top: 8px;
+                      max-width: 520px;
+                  }
+
+                  .attachment-link {
+                      display: inline-flex;
+                      align-items: center;
+                      padding: 8px 12px;
+                      background-color: #2b2d31;
+                      border: 1px solid #1e1f22;
+                      border-radius: 4px;
+                      color: #00a8fc;
+                      text-decoration: none;
+                      font-size: 14px;
+                  }
+
+                  .attachment-link:hover {
+                      background-color: #1e1f22;
+                      text-decoration: underline;
+                  }
+
+                  .attachment-icon {
+                      margin-right: 8px;
+                  }
+
+                  .divider {
+                      height: 1px;
+                      background-color: #3f4147;
+                      margin: 24px 16px;
+                  }
+
+                  .info-bar {
+                      background-color: #2b2d31;
+                      border-top: 1px solid #1e1f22;
+                      padding: 16px;
+                      text-align: center;
+                      color: #949ba4;
+                      font-size: 14px;
+                  }
+
+                  .info-bar-content {
+                      max-width: 800px;
+                      margin: 0 auto;
+                  }
+
+                  .info-stat {
+                      display: inline-block;
+                      margin: 0 16px;
+                  }
+
+                  .info-stat strong {
+                      color: #f2f3f5;
+                  }
+
+                  ::-webkit-scrollbar {
+                      width: 16px;
+                  }
+
+                  ::-webkit-scrollbar-track {
+                      background-color: #2b2d31;
+                  }
+
+                  ::-webkit-scrollbar-thumb {
+                      background-color: #1a1b1e;
+                      border: 4px solid #2b2d31;
+                      border-radius: 8px;
+                  }
+
+                  ::-webkit-scrollbar-thumb:hover {
+                      background-color: #0f1014;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="discord-container">
+                  <div class="channel-sidebar">
+                      <div class="server-name">${escapeHtml(interaction.guild.name)}</div>
+                      <div class="channel-list">
+                          <div class="channel-item active">
+                              <span class="channel-icon">#</span>
+                              <span>${escapeHtml(interaction.channel.name)}</span>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div class="chat-container">
+                      <div class="chat-header">
+                          <div class="channel-name">${escapeHtml(interaction.channel.name)}</div>
+                          <div class="channel-topic">Ticket Transcript • Closed by ${escapeHtml(interaction.user.tag)} • ${new Date().toLocaleDateString()}</div>
+                      </div>
+
+                      <div class="messages-wrapper">`;
+
+          sortedMessages.forEach(msg => {
+            const timestamp = new Date(msg.createdTimestamp).toLocaleTimeString('en-US', { 
+              hour: 'numeric', 
+              minute: '2-digit',
+              hour12: true 
+            });
+
+            const avatarUrl = msg.author.displayAvatarURL({ extension: 'png', size: 128 });
+            const botTag = msg.author.bot ? '<span class="bot-tag">BOT</span>' : '';
+
+            transcript += `
+                          <div class="message-group">
+                              <div class="message-header">
+                                  <div class="avatar">
+                                      <img src="${avatarUrl}" alt="${escapeHtml(msg.author.username)}" class="avatar-image" />
+                                  </div>
+                                  <div class="message-content-wrapper">
+                                      <div class="message-author">
+                                          <span class="username">${escapeHtml(msg.author.username)}</span>${botTag}
+                                          <span class="timestamp">${timestamp}</span>
+                                      </div>`;
+
+            if (msg.content) {
+              transcript += `
+                                      <div class="message-text">${escapeHtml(msg.content)}</div>`;
+            }
+
+            if (msg.embeds.length > 0) {
+              msg.embeds.forEach(embed => {
+                transcript += `
+                                      <div class="embed">`;
+                if (embed.title) {
+                  transcript += `
+                                          <div class="embed-title">${escapeHtml(embed.title)}</div>`;
+                }
+                if (embed.description) {
+                  transcript += `
+                                          <div class="embed-description">${escapeHtml(embed.description.substring(0, 500))}</div>`;
+                }
+                transcript += `
+                                      </div>`;
+              });
+            }
+
+            if (msg.attachments.size > 0) {
+              msg.attachments.forEach(att => {
+                transcript += `
+                                      <div class="attachment">
+                                          <a href="${att.url}" target="_blank" class="attachment-link">
+                                              <span class="attachment-icon">📎</span>
+                                              ${escapeHtml(att.name)}
+                                          </a>
+                                      </div>`;
+              });
+            }
+
+            transcript += `
+                                  </div>
+                              </div>
+                          </div>`;
+          });
+
+          transcript += `
+                      </div>
+
+                      <div class="info-bar">
+                          <div class="info-bar-content">
+                              <span class="info-stat"><strong>${sortedMessages.length}</strong> messages</span>
+                              <span class="info-stat">Closed by <strong>${escapeHtml(interaction.user.tag)}</strong></span>
+                              <span class="info-stat">Generated on <strong>${new Date().toLocaleString()}</strong></span>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </body>
+          </html>`;
+
+          const buffer = Buffer.from(transcript, 'utf-8');
+          const attachment = new AttachmentBuilder(buffer, { name: `transcript-${interaction.channel.name}-${Date.now()}.html` });
+
+          const logChannelId = "1445580720839069696";
+          const logChannel = interaction.guild.channels.cache.get(logChannelId);
+
+          if (logChannel) {
+            const transcriptEmbed = new EmbedBuilder()
+              .setTitle("📋 Ticket Closed")
+              .setDescription(`Ticket: ${interaction.channel.name}`)
+              .addFields(
+                { name: "Closed by", value: `${interaction.user.tag}`, inline: true },
+                { name: "Messages", value: `${sortedMessages.length}`, inline: true },
+                { name: "Date", value: `${new Date().toLocaleString()}`, inline: true }
+              )
+              .setColor(0xff0000)
+              .setFooter({ text: "💡 Download the HTML file and open it in your browser" })
+              .setTimestamp();
+
+            await logChannel.send({ embeds: [transcriptEmbed], files: [attachment] });
+          }
+
+          setTimeout(() => interaction.channel.delete().catch(console.error), 3000);
+        } catch (error) {
+          console.error(error);
+          await interaction.followUp({ content: "⚠️ Error generating transcript, but closing anyway...", flags: 64 });
+          setTimeout(() => interaction.channel.delete().catch(console.error), 3000);
+        }
+      }
+
+      // ADD USER
+      if (action === "ticket_add_user") {
+        return interaction.showModal({
+          title: "Add User to Ticket",
+          custom_id: "add_user_modal",
+          components: [{
+            type: 1,
+            components: [{ type: 4, custom_id: "user_id", label: "User ID", style: 1, placeholder: "Enter user ID", required: true }]
+          }]
+        });
+      }
+
+      // REMOVE USER
+      if (action === "ticket_remove_user") {
+        return interaction.showModal({
+          title: "Remove User from Ticket",
+          custom_id: "remove_user_modal",
+          components: [{
+            type: 1,
+            components: [{ type: 4, custom_id: "user_id", label: "User ID", style: 1, placeholder: "Enter user ID", required: true }]
+          }]
+        });
+      }
+
+      // LOCK TICKET
+      if (action === "ticket_lock") {
+        try {
+          const ticketOwnerId = interaction.channel.topic?.match(/Owner: (\d+)/)?.[1];
+          const ticketOwner = ticketOwnerId ? interaction.guild.members.cache.get(ticketOwnerId) : null;
+
+          if (ticketOwner) {
+            await interaction.channel.permissionOverwrites.edit(ticketOwner.id, { SendMessages: false });
+          }
+
+          return interaction.reply({ content: "🔒 Ticket locked.", flags: 64 });
+        } catch (error) {
+          console.error(error);
+          return interaction.reply({ content: "❌ Failed to lock ticket.", flags: 64 });
+        }
+      }
+
+      // SEND RECEIPT
+      if (action === "ticket_send_receipt") {
+        return interaction.showModal({
+          title: "Send Receipt",
+          custom_id: "receipt_modal",
+          components: [
+            { type: 1, components: [{ type: 4, custom_id: "order", label: "Order Items", style: 2, placeholder: "Enter order items", required: true }] },
+            { type: 1, components: [{ type: 4, custom_id: "mop", label: "Method of Payment", style: 1, placeholder: "e.g., cashapp", required: true }] },
+            { type: 1, components: [{ type: 4, custom_id: "revisions", label: "Number of Revisions", style: 1, placeholder: "e.g., 2", required: true }] },
+            { type: 1, components: [{ type: 4, custom_id: "dates", label: "Start Date | End Date", style: 1, placeholder: "mm.dd.yy | mm.dd.yy", required: true }] }
+          ]
+        });
+      }
+
+      // SEND DELIVERY
+      if (action === "ticket_delivery") {
+        return interaction.showModal({
+          title: "Send Delivery",
+          custom_id: "delivery_modal",
+          components: [
+            { 
+              type: 1, 
+              components: [{ 
+                type: 4, 
+                custom_id: "delivery_link", 
+                label: "Delivery Link", 
+                style: 1, 
+                placeholder: "Enter the delivery link (URL)", 
+                required: true 
+              }] 
+            },
+            { 
+              type: 1, 
+              components: [{ 
+                type: 4, 
+                custom_id: "order_items", 
+                label: "Order Items", 
+                style: 2, 
+                placeholder: "What did they order?", 
+                required: true 
+              }] 
+            }
+          ]
+        });
+      }
+
+
+
+      // BAN USER
+      if (action === "ticket_ban") {
+        try {
+          const ticketOwnerId = interaction.channel.topic?.match(/Owner: (\d+)/)?.[1];
+          const ticketOwner = ticketOwnerId ? interaction.guild.members.cache.get(ticketOwnerId) : null;
+
+          if (!ticketOwner) return interaction.reply({ content: "❌ Could not find ticket owner.", flags: 64 });
+
+          await interaction.channel.setTopic(`🚫 User ${ticketOwner.user.tag} banned from tickets`);
+          return interaction.reply({ content: `🚫 ${ticketOwner.user.tag} banned from creating tickets.`, flags: 64 });
+        } catch (error) {
+          console.error(error);
+          return interaction.reply({ content: "❌ Failed to ban user.", flags: 64 });
+        }
+      }
+
+      // SET PRIORITY
+      if (action === "ticket_priority") {
+        const priorityMenu = new StringSelectMenuBuilder()
+          .setCustomId("priority_select")
+          .setPlaceholder("Select priority level")
+          .addOptions([
+            { label: "🟢 Low", value: "low", description: "low priority" },
+            { label: "🟡 Medium", value: "medium", description: "medium priority" },
+            { label: "🟠 High", value: "high", description: "high priority" },
+            { label: "🔴 Urgent", value: "urgent", description: "urgent priority" }
+          ]);
+
+        return interaction.reply({ content: "Select ticket priority:", components: [new ActionRowBuilder().addComponents(priorityMenu)], flags: 64 });
+      }
+
+      // ARCHIVE TICKET
+      if (action === "ticket_archive") {
+        try {
+          const archiveCategoryId = "1449808642885947554";
+          const archiveCategory = interaction.guild.channels.cache.get(archiveCategoryId);
+
+          if (!archiveCategory) return interaction.reply({ content: "❌ Archive category not found.", flags: 64 });
+
+          await interaction.channel.setParent(archiveCategoryId);
+          await interaction.channel.send("📦 This ticket has been archived.");
+          return interaction.reply({ content: "✅ Ticket archived.", flags: 64 });
+        } catch (error) {
+          console.error(error);
+          return interaction.reply({ content: "❌ Failed to archive ticket.", flags: 64 });
+        }
+      }
+    }
+
+    // ───────────── HANDLE PRIORITY SELECT
+    if (interaction.isStringSelectMenu() && interaction.customId === "priority_select") {
+      if (!interaction.member.roles.cache.has(staffRoleId)) {
+        return interaction.reply({ content: "🚫 No permission.", flags: 64 });
+      }
+
+      const priority = interaction.values[0];
+      const emoji = { low: "🟢", medium: "🟡", high: "🟠", urgent: "🔴" };
+
+      await interaction.channel.setTopic(`Priority: ${emoji[priority]} ${priority.toUpperCase()}`);
+      return interaction.update({ content: `✅ Priority set to ${emoji[priority]} **${priority.toUpperCase()}**`, components: [] });
+    }
+
+    // ───────────── HANDLE ADD USER MODAL
+    if (interaction.isModalSubmit() && interaction.customId === "add_user_modal") {
+      if (!interaction.member.roles.cache.has(staffRoleId)) {
+        return interaction.reply({ content: "🚫 No permission.", flags: 64 });
+      }
+
+      const userId = interaction.fields.getTextInputValue("user_id");
 
       try {
-        // Fetch ALL messages from the ticket channel
-        let allMessages = [];
-        let lastMessageId;
+        const user = await interaction.guild.members.fetch(userId);
+        await interaction.channel.permissionOverwrites.edit(user.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true });
+        await interaction.channel.send(`✅ ${user} added to ticket.`);
+        return interaction.reply({ content: `✅ Added ${user.user.tag}.`, flags: 64 });
+      } catch (error) {
+        console.error(error);
+        return interaction.reply({ content: "❌ Could not find user.", flags: 64 });
+      }
+    }
 
-        // Keep fetching messages in batches of 100 until we have them all
-        while (true) {
-          const options = { limit: 100 };
-          if (lastMessageId) {
-            options.before = lastMessageId;
-          }
+    // ───────────── HANDLE REMOVE USER MODAL
+    if (interaction.isModalSubmit() && interaction.customId === "remove_user_modal") {
+      if (!interaction.member.roles.cache.has(staffRoleId)) {
+        return interaction.reply({ content: "🚫 No permission.", flags: 64 });
+      }
 
-          const messages = await interaction.channel.messages.fetch(options);
-          if (messages.size === 0) break;
+      const userId = interaction.fields.getTextInputValue("user_id");
 
-          allMessages.push(...messages.values());
-          lastMessageId = messages.last().id;
+      try {
+        const user = await interaction.guild.members.fetch(userId);
+        await interaction.channel.permissionOverwrites.delete(user.id);
+        await interaction.channel.send(`✅ ${user} removed from ticket.`);
+        return interaction.reply({ content: `✅ Removed ${user.user.tag}.`, flags: 64 });
+      } catch (error) {
+        console.error(error);
+        return interaction.reply({ content: "❌ Could not find user.", flags: 64 });
+      }
+    }
+    // ───────────── HANDLE DELIVERY MODAL (ADD THIS WITH OTHER MODAL HANDLERS) ─────────────
 
-          // If we got less than 100 messages, we've reached the end
-          if (messages.size < 100) break;
-        }
+    if (interaction.isModalSubmit() && interaction.customId === "delivery_modal") {
+      if (!interaction.member.roles.cache.has(staffRoleId)) {
+        return interaction.reply({ content: "🚫 No permission.", flags: 64 });
+      }
 
-        const sortedMessages = allMessages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+      const deliveryLink = interaction.fields.getTextInputValue("delivery_link");
+      const orderItems = interaction.fields.getTextInputValue("order_items");
 
-        // Generate HTML transcript
-        const escapeHtml = (text) => {
-          return text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-        };
+      // Find ticket owner
+      const ticketOwnerId = interaction.channel.topic?.match(/Owner: (\d+)/)?.[1];
+      let ticketOwner = ticketOwnerId ? interaction.guild.members.cache.get(ticketOwnerId) : null;
 
-        let transcript = `<!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Ticket Transcript - ${interaction.channel.name}</title>
-        <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+      // Fallback: try to find from channel name
+      if (!ticketOwner) {
+        const ticketOwnerName = interaction.channel.name.replace('ticket-', '');
+        ticketOwner = interaction.guild.members.cache.find(m => 
+          m.user.username.toLowerCase() === ticketOwnerName.toLowerCase()
+        );
+      }
 
-            body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                padding: 20px;
-                min-height: 100vh;
-            }
+      if (!ticketOwner) {
+        return interaction.reply({ content: "❌ Could not find ticket owner.", flags: 64 });
+      }
 
-            .container {
-                max-width: 900px;
-                margin: 0 auto;
-                background: white;
-                border-radius: 12px;
-                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-                overflow: hidden;
-            }
+      try {
+        // Get order details from modal (you'll need to add this to the modal)
+        const deliveryButtons = new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setCustomId("delivery_disabled")
+              .setLabel("˚ִִ 𓏼 ͜͜✚ྀ⊹")
+              .setStyle(2) // Secondary (gray)
+              .setDisabled(true),
+            new ButtonBuilder()
+              .setLabel("⠀") // Blank label (zero-width space for completely blank)
+              .setStyle(5) // Link button
+              .setURL(deliveryLink)
+          );
 
-            .header {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                padding: 30px;
-                text-align: center;
-            }
+        const deliveryMessage = `˚ ．𓉯ྀ⑅┊𓂅 s**p**__e__c**i**a**l**  d**e**__l**i**v**e**r__**y** ⁺⸺ ${ticketOwner} ˚ִִ 𓏼 ͜͜✚ྀ⊹𓈒
+    ⠀ ⠀ /ᐠ > . < ̥マ 𓏼 ₊ ͜
+    ⠀ ꒰৮ ྐ✚ ₊　you｡ ordered ⠀ ♡︎ ༷݁ ꒱ྀ
+    ꒷꒦ ͜ ¦𓏵 ᭪ ${orderItems}
+    𓉸ྀི 𓂃˚ open｡ ticket if broken ྀི ͡ ̣̣̣ ׁ ︶`;
 
-            .header h1 {
-                font-size: 28px;
-                margin-bottom: 10px;
-            }
-
-            .header-info {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 15px;
-                margin-top: 20px;
-                text-align: left;
-            }
-
-            .info-item {
-                background: rgba(255,255,255,0.1);
-                padding: 12px;
-                border-radius: 8px;
-                backdrop-filter: blur(10px);
-            }
-
-            .info-label {
-                font-size: 12px;
-                opacity: 0.9;
-                margin-bottom: 5px;
-            }
-
-            .info-value {
-                font-size: 16px;
-                font-weight: 600;
-            }
-
-            .messages {
-                padding: 30px;
-            }
-
-            .message {
-                margin-bottom: 20px;
-                animation: fadeIn 0.3s ease-in;
-            }
-
-            @keyframes fadeIn {
-                from { opacity: 0; transform: translateY(10px); }
-                to { opacity: 1; transform: translateY(0); }
-            }
-
-            .message-header {
-                display: flex;
-                align-items: center;
-                margin-bottom: 8px;
-            }
-
-            .avatar {
-                width: 40px;
-                height: 40px;
-                border-radius: 50%;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: white;
-                font-weight: bold;
-                margin-right: 12px;
-                flex-shrink: 0;
-            }
-
-            .message-info {
-                flex: 1;
-            }
-
-            .username {
-                font-weight: 600;
-                color: #2c3e50;
-                font-size: 15px;
-            }
-
-            .timestamp {
-                font-size: 12px;
-                color: #95a5a6;
-                margin-left: 8px;
-            }
-
-            .message-content {
-                margin-left: 52px;
-                padding: 12px 16px;
-                background: #f8f9fa;
-                border-radius: 8px;
-                border-left: 3px solid #667eea;
-                color: #2c3e50;
-                line-height: 1.6;
-                word-wrap: break-word;
-            }
-
-            .embed {
-                margin-left: 52px;
-                margin-top: 8px;
-                padding: 12px 16px;
-                background: #e8f4f8;
-                border-radius: 8px;
-                border-left: 3px solid #3498db;
-                font-size: 14px;
-                color: #34495e;
-            }
-
-            .embed-title {
-                font-weight: 600;
-                margin-bottom: 5px;
-            }
-
-            .attachment {
-                margin-left: 52px;
-                margin-top: 8px;
-                padding: 10px 14px;
-                background: #fff3cd;
-                border-radius: 8px;
-                border-left: 3px solid #ffc107;
-                font-size: 13px;
-            }
-
-            .attachment a {
-                color: #856404;
-                text-decoration: none;
-                font-weight: 500;
-            }
-
-            .attachment a:hover {
-                text-decoration: underline;
-            }
-
-            .footer {
-                background: #f8f9fa;
-                padding: 20px;
-                text-align: center;
-                color: #6c757d;
-                font-size: 14px;
-                border-top: 1px solid #dee2e6;
-            }
-
-            .bot-tag {
-                display: inline-block;
-                background: #5865f2;
-                color: white;
-                font-size: 10px;
-                padding: 2px 6px;
-                border-radius: 4px;
-                margin-left: 6px;
-                font-weight: 600;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>🎫 Ticket Transcript</h1>
-                <div class="header-info">
-                    <div class="info-item">
-                        <div class="info-label">Ticket Channel</div>
-                        <div class="info-value">${escapeHtml(interaction.channel.name)}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Closed By</div>
-                        <div class="info-value">${escapeHtml(interaction.user.tag)}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Closed At</div>
-                        <div class="info-value">${new Date().toLocaleString()}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Total Messages</div>
-                        <div class="info-value">${sortedMessages.size}</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="messages">`;
-
-        sortedMessages.forEach(msg => {
-          const timestamp = new Date(msg.createdTimestamp).toLocaleString();
-          const avatarLetter = msg.author.username.charAt(0).toUpperCase();
-          const botTag = msg.author.bot ? '<span class="bot-tag">BOT</span>' : '';
-
-          transcript += `
-                <div class="message">
-                    <div class="message-header">
-                        <div class="avatar">${avatarLetter}</div>
-                        <div class="message-info">
-                            <span class="username">${escapeHtml(msg.author.username)}${botTag}</span>
-                            <span class="timestamp">${timestamp}</span>
-                        </div>
-                    </div>`;
-
-          if (msg.content) {
-            transcript += `
-                    <div class="message-content">${escapeHtml(msg.content)}</div>`;
-          }
-
-          if (msg.embeds.length > 0) {
-            msg.embeds.forEach(embed => {
-              transcript += `
-                    <div class="embed">
-                        <div class="embed-title">📎 Embed${embed.title ? ': ' + escapeHtml(embed.title) : ''}</div>
-                        ${embed.description ? '<div>' + escapeHtml(embed.description.substring(0, 200)) + '...</div>' : ''}
-                    </div>`;
-            });
-          }
-
-          if (msg.attachments.size > 0) {
-            msg.attachments.forEach(att => {
-              transcript += `
-                    <div class="attachment">
-                        📎 <a href="${att.url}" target="_blank">${escapeHtml(att.name)}</a>
-                    </div>`;
-            });
-          }
-
-          transcript += `
-                </div>`;
+        await ticketOwner.send({
+          content: deliveryMessage,
+          components: [deliveryButtons]
         });
 
-        transcript += `
-            </div>
+        await interaction.channel.send(`✅ Delivery sent to ${ticketOwner.user.tag}!`);
+        return interaction.reply({ content: `✅ Delivery message sent to ${ticketOwner.user.tag}.`, flags: 64 });
+      } catch (error) {
+        console.error("Delivery send error:", error);
 
-            <div class="footer">
-                Generated by Discord Ticket System • ${new Date().toLocaleString()}
-            </div>
-        </div>
-    </body>
-    </html>`;
-
-        // Create buffer for file upload
-        const buffer = Buffer.from(transcript, 'utf-8');
-        const attachment = new AttachmentBuilder(buffer, { 
-          name: `transcript-${interaction.channel.name}-${Date.now()}.html` 
-        });
-
-        // Send transcript to a log channel (replace with your log channel ID)
-        const logChannelId = "1445580720839069696"; // Set this to your transcript log channel
-        const logChannel = interaction.guild.channels.cache.get(logChannelId);
-
-        if (logChannel) {
-          const transcriptEmbed = new EmbedBuilder()
-            .setTitle("📋 Ticket Closed")
-            .setDescription(`Ticket: ${interaction.channel.name}\n\n**[Click here to view transcript](attachment://transcript-${interaction.channel.name}-${Date.now()}.html)**`)
-            .addFields(
-              { name: "Closed by", value: `${interaction.user.tag}`, inline: true },
-              { name: "Messages", value: `${sortedMessages.length}`, inline: true },
-              { name: "Date", value: `${new Date().toLocaleString()}`, inline: true }
-            )
-            .setColor(0xff0000)
-            .setFooter({ text: "💡 Download the HTML file and open it in your browser to view the full transcript" })
-            .setTimestamp();
-
-          await logChannel.send({ 
-            embeds: [transcriptEmbed], 
-            files: [attachment] 
+        if (error.code === 50007) {
+          return interaction.reply({ 
+            content: "❌ Cannot send DM to this user. They may have DMs disabled.", 
+            flags: 64 
           });
         }
 
-        // Delete the ticket channel after a delay
-        setTimeout(() => {
-          interaction.channel.delete().catch(console.error);
-        }, 3000);
-
-      } catch (error) {
-        console.error("Error generating transcript:", error);
-        await interaction.followUp({ 
-          content: "⚠️ Error generating transcript, but closing ticket anyway...", 
+        return interaction.reply({ 
+          content: "❌ Failed to send delivery message.", 
           flags: 64 
         });
-
-        setTimeout(() => {
-          interaction.channel.delete().catch(console.error);
-        }, 3000);
       }
     }
+
+
+    // ───────────── HANDLE RECEIPT MODAL
+    if (interaction.isModalSubmit() && interaction.customId === "receipt_modal") {
+      if (!interaction.member.roles.cache.has(staffRoleId)) {
+        return interaction.reply({ content: "🚫 No permission.", flags: 64 });
+      }
+
+      const order = interaction.fields.getTextInputValue("order");
+      const mop = interaction.fields.getTextInputValue("mop");
+      const revisions = interaction.fields.getTextInputValue("revisions");
+      const dates = interaction.fields.getTextInputValue("dates");
+      const [startdate, enddate] = dates.split('|').map(d => d.trim());
+
+      const ticketOwnerId = interaction.channel.topic?.match(/Owner: (\d+)/)?.[1];
+      const ticketOwner = ticketOwnerId ? interaction.guild.members.cache.get(ticketOwnerId) : null;
+
+      if (!ticketOwner) return interaction.reply({ content: "❌ Could not find ticket owner.", flags: 64 });
+
+      const formattedOrder = order.trim().split(/\n+/).map(line => line.trim() ? `> ${line.trim()}` : '>').join('\n');
+
+      const receipt = `_ _ 　  ✦　　.　　𓂀　　.　　✧
+    _ _　 　꒰ ◜　\`🧾\`　◝ ꒱　⁺　**${ticketOwner}**'s ◟
+    _ _　         ◍　˚  \`💬\`　࿓　order receipt
+    _ _ 　  ˚　　 .　 　\`📦\`　　˚　 　 .　　 ˚
+    _ _　   ⨀ 𓄹 ⨀　⏑⏑　overall　**order**
+    ${formattedOrder}
+
+    _ _　   · 𐙚 ·´　\`📝\`　｡　Ⴢ　revisions: ${revisions}
+    _ _　　 ⁺　\`🐾\`　𓐆　˚　ฅ　payment: ${mop}
+    _ _ 　  ˚　　 .　 　\`🪾\`　　˚　 　 .　　 ˚
+-# _ _　　꙳ 𓊝 ꙳　date started: ${startdate}
+-# _ _　　꙳ 𓆸 ꙳　date finished: ${enddate}
+    _ _ 　  ✿　　.　　✦　　.　　˚`;
+
+      const recChannel = interaction.guild.channels.cache.get(RECEIPT_CHANNEL_ID);
+      if (recChannel?.isTextBased()) await recChannel.send({ content: receipt });
+
+      await interaction.channel.send({ content: receipt });
+      return interaction.reply({ content: "✅ Receipt sent!", flags: 64 });
+    }
+  
     // ───────────── /prices
     if (interaction.isChatInputCommand() && interaction.commandName === "prices") {
       const menu = new StringSelectMenuBuilder()
@@ -1017,6 +1641,49 @@ extra revisions: $1 after your 3rd
     console.error(err);
   }
 });
+
+// ═══════════════════════════════════════════════════════════
+// 📨 MESSAGE LISTENER FOR AUTORESPONDERS
+// ═══════════════════════════════════════════════════════════
+client.on("messageCreate", async message => {
+  // Ignore bot messages
+  if (message.author.bot) return;
+
+  // Check each autoresponder
+  for (const [trigger, data] of autoresponders) {
+    // Skip if disabled
+    if (!data.enabled) continue;
+
+    const messageContent = message.content.toLowerCase();
+    let shouldRespond = false;
+
+    // Check if trigger matches
+    if (data.exactMatch) {
+      // Exact match: message must be exactly the trigger
+      shouldRespond = messageContent === trigger;
+    } else {
+      // Contains match: message must contain the trigger
+      shouldRespond = messageContent.includes(trigger);
+    }
+
+    if (shouldRespond) {
+      try {
+        // Delete trigger message if configured
+        if (data.deleteTrigger && message.deletable) {
+          await message.delete().catch(console.error);
+        }
+
+        // Send response
+        await message.channel.send(data.response);
+
+        // Only respond to first matching trigger
+        break;
+      } catch (error) {
+        console.error("Error in autoresponder:", error);
+      }
+    }
+  }
+});
 // ───────────────────────────────
 // 💌 Welcomer
 // ───────────────────────────────
@@ -1025,7 +1692,7 @@ client.on("guildMemberAdd", async member => {
     const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
     if (!channel?.isTextBased()) return;
 
-    const welcomeText = `_ _ ˚ ．𓉯ྀ⑅┊𓂅 w**e**__lco__m**e** ⁺⸺ ${member} ˚ִִ 𓏼 ͜͜✚ྀ⊹𓈒 ͜͝ | ͜͝ |\n⠀ ⠀ _ _`;
+    const welcomeText = `-#_ _ ˚ ．𓉯ྀ⑅┊𓂅 w**e**__lco__m**e** ⁺⸺ ${member} ˚ִִ 𓏼 ͜͜✚ྀ⊹𓈒 ͜͝ | ͜͝ |\n⠀ ⠀ _ _`;
 
 
     const embed1 = new EmbedBuilder()
@@ -1033,11 +1700,13 @@ client.on("guildMemberAdd", async member => {
       .setDescription(
         `⠀ ⠀ ⠀/ᐠ > . < ̥マ ݂۫ 𓏼 ₊ ͜ ◞ ྀིྀ\n⠀ ⠀ ꒰৯ ྐ✚ ₊　[tos](https://discord.com/channels/1427657617333026868/1428147471435038730)　+　[revw](https://discord.com/channels/1427657617333026868/1428394657762775191) ⠀ ♡︎ ༷݁ ꒱ྀ\n_ _　　꒷꒦ ͜ ¦𓏵 ᭪ [ask](https://discord.com/channels/1427657617333026868/1428392518168477747)｡ questions 𓏼 ͡ ⑅ ♡\n_ _　　　𓉸ྀི 𓂃˚ [exm](https://discord.com/channels/1427657617333026868/1428536539020918805) / [price](https://discord.com/channels/1427657617333026868/1428156228634411038) + [order](https://discord.com/channels/1427657617333026868/1428394803527290900) ྀི ͡ ̣̣̣ ׁ ︶`
       )
-      .setImage("https://cdn.discordapp.com/attachments/1427657618008047621/1428616052152991744/ei_1760678820069-removebg-preview.png");
+      .setThumbnail("https://cdn.discordapp.com/attachments/1439498545106259969/1449783661724434474/download_1.gif?ex=694027c0&is=693ed640&hm=b5faa1e0aeece6c5de4e4559fdcc4c179adeaa6035c188ce007f6e6a4fbb7637&")
+      .setImage("https://media.tenor.com/neRZrojlfIcAAAAi/divider-aesthetic.gif")
+      ;
 
     const embed2 = new EmbedBuilder()
       .setColor(0x36393f)
-      .setImage("https://cdn.discordapp.com/attachments/1427657618008047621/1428556895890968616/94927758da49e22d1584f9dd766d8345.jpg");
+      .setImage("https://cdn.discordapp.com/attachments/1439498545106259969/1449783269267607571/ezgif.com-crop.gif?ex=69402763&is=693ed5e3&hm=17e1300ac633e43b185b0579f30295c9934f5fdd66ca32a6d6be8744d7136fb6&");
 
     await channel.send({ content: welcomeText, embeds: [embed1, embed2] });
   } catch (err) {

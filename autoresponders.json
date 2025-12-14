@@ -1,0 +1,18 @@
+{
+  ".test": {
+    "response": "hi",
+    "exactMatch": false,
+    "deleteTrigger": false,
+    "enabled": true,
+    "createdBy": "1420063872181600487",
+    "createdAt": 1765743180415
+  },
+  ".start": {
+    "response": "˚ ．𓂃𖧁⑅┊𓊇 o**r**__d**e**r__ ⁺⸺ **form** ˚ִִ 𓏴 ͜͜✦⊹\n⠀ ꒰𖹭 ᩧ ✿ ₊　**item type:** ⠀ \n　 ꒷𖧷 ͜ ¦𓎟 ᭪ **payment:** \n　　 𓂋ྀི 𓏲˚ **info separate** ྀི ͡ ̣̣̣ ׁ ︶`",
+    "exactMatch": true,
+    "deleteTrigger": true,
+    "enabled": true,
+    "createdBy": "1420063872181600487",
+    "createdAt": 1765743637984
+  }
+}
