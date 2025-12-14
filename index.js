@@ -224,7 +224,7 @@ client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   client.user.setPresence({
     status: "dnd",
-    activities: [{ name: "in testing", type: 3 }],
+    activities: [{ name: "a biohzrd bot", type: 3 }],
   });
 
   try {
